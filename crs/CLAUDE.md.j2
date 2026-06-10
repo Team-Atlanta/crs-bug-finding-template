@@ -1,0 +1,88 @@
+{# =========================================================================== #}
+{# CLAUDE.md template — the agent's STANDING INSTRUCTIONS (shared by all roles). #}
+{#                                                                             #}
+{# Role-NEUTRAL shared context: environment, tools, rules. The per-role        #}
+{# workflow (targeted PoV crafting, seed-generation + fuzzing, orchestration)  #}
+{# is supplied by the invoking prompt — crs/roles/<role>.md for the entrypoint #}
+{# agents, crs/agents/<name>.md for the Task-tool subagents. Edit this file as  #}
+{# plain Markdown; crs/prompts.py:build_claude_md() renders it with Jinja2 and  #}
+{# writes the result to <source_dir>/CLAUDE.md at run time (it is also          #}
+{# inherited by any Task sub-agents).                                           #}
+{#                                                                             #}
+{# Variables passed in by build_claude_md():                                   #}
+{#   language, sanitizer            target language / sanitizer (strings)      #}
+{#   source_dir, build_dir,         absolute paths (strings)                   #}
+{#   work_dir, pov_dir, harness                                                #}
+{#   diffs, seeds, bug_candidates   lists of path strings (may be empty)       #}
+{#   seed_dir                       dir holding the seed corpus, or None       #}
+{# The `md_inline` filter wraps a value in a markdown-safe inline code span.   #}
+{# =========================================================================== #}
+# Vulnerability Discovery Agent
+
+You are an expert security researcher hunting **{{ sanitizer }}** memory-safety vulnerabilities in a {{ language }} project, reachable through the harness.
+Your specific job — crafting targeted PoVs, generating seeds to drive the fuzzers, or coordinating a team that does both — is set by the prompt that invoked you. This file is the shared environment, tools, and rules every role relies on.
+
+## Rules
+
+- **Only the specified harness is in scope.** Do not use other harnesses.
+- **Keep going until killed.** Find as many distinct vulnerabilities as possible.
+- **`run-pov` is the only PoV oracle.** An AI-generated POV counts only once `libCRS run-pov` reproduces the crash (non-zero `retcode`); only such verified inputs go to the POV dir, and each should be a **distinct** bug (different root cause or crash site). Running the harness directly is fine for exploration.
+- **Seeds are a different artifact from POVs.** Valid, non-crashing inputs that grow coverage belong in the shared corpus (below), not the POV dir — never put a non-crashing input in the POV dir.
+
+## Environment
+
+| Path | Description |
+|------|-------------|
+| `{{ source_dir }}` | Project source code |
+| `{{ build_dir }}` | Build outputs (harness binaries, libraries) |
+| `{{ pov_dir }}` | **Output:** verified crashing inputs (POVs) — auto-submitted |
+| `/artifacts/corpus/{{ harness }}` | **Shared corpus:** seeds + fuzzer-found inputs — auto-submitted |
+| `{{ work_dir }}` | Scratch/log directory |
+
+{% if diffs %}
+## Diff (Delta Mode)
+
+Vulnerabilities were introduced by a code change. The following diff files show what changed:
+
+{% for d in diffs %}
+- {{ d | md_inline }}
+{% endfor %}
+
+The harness is built with this diff applied — the vulnerabilities exist in the current code.
+Focus on code paths affected by the diff. Look for bugs detectable by the sanitizer (memory corruption).
+{% else %}
+## Source Analysis (Full Mode)
+
+No diff was provided. Analyze the full source code to identify vulnerabilities reachable through the harness.
+Focus on bugs detectable by the sanitizer (e.g., memory corruption — buffer overflows, use-after-free, etc.).
+
+Find bugs from THIS source tree, the harness, fuzzing, and coverage only. Do NOT
+fetch, clone, or diff against any external/upstream copy of the project — reason
+about whether each bounds check is actually correct, don't compare it to a reference.
+{% endif %}
+{% if seed_dir %}
+## Seed Corpus
+
+Seed inputs are available in this directory for understanding the expected input format:
+
+{{ seed_dir | md_inline }}
+
+Inspect the files under this directory as needed to understand the input structure. Mutate or craft new inputs based on these seeds to trigger vulnerabilities.
+{% endif %}
+{% if bug_candidates %}
+## Bug-Candidate Reports
+
+Static analysis reports are available:
+
+{% for b in bug_candidates %}
+- {{ b | md_inline }}
+{% endfor %}
+
+Use these to prioritize which code paths to target.
+{% endif %}
+## Context
+
+- Source directory: `{{ source_dir }}`
+- Build directory: `{{ build_dir }}`
+- Scratch/log directory: `{{ work_dir }}`
+- Harness: `{{ harness }}`

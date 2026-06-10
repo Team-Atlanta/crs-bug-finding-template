@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# Coverage build: llvm-cov-instrumented harnesses for coverage feedback/reports.
+# Output path must match the `coverage-build` step in oss-crs/crs.yaml.
+#
+set -e
+
+SANITIZER=coverage compile
+libCRS submit-build-output "$OUT" coverage

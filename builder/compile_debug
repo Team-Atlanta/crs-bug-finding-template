@@ -1,0 +1,29 @@
+#!/bin/bash
+#
+# Debug build: keep the configured sanitizer (ASan) but maximize debuggability
+# (-O0, full debug info, frame pointers, no inlining) for clean gdb stacks.
+# Output path must match the `debug-build` step in oss-crs/crs.yaml.
+#
+set -e
+
+# -gdwarf-4: clang defaults to DWARF 5, but the runner image is built FROM the
+# target's matched base OS (oss-crs base_runner_image), which on older targets
+# (e.g. Ubuntu 20.04 -> gdb 9.2) cannot parse DWARF 5 ("DW_FORM_strx1" error) and
+# silently degrades to ELF-symbols-only (no file:line / no named args under gdb).
+# Pinning DWARF 4 keeps the debug info readable by any gdb >= 7.5.
+export CFLAGS="${CFLAGS:-} -O0 -g3 -gdwarf-4 -fno-omit-frame-pointer -fno-inline"
+export CXXFLAGS="${CXXFLAGS:-} -O0 -g3 -gdwarf-4 -fno-omit-frame-pointer -fno-inline"
+
+# -gdwarf-4 covers the target + harness, but the *prebuilt* compiler-rt runtimes
+# linked into every fuzzer (the libFuzzer engine AND the ASan/sanitizer_common
+# runtime) are built with clang-18 -> DWARF 5. A single DWARF-5 CU makes an older
+# runner gdb (gdb < 10, as shipped by the target's matched base OS) abort ALL DWARF
+# parsing for the binary — discarding our DWARF-4 target info too. None of these
+# runtime frames need source-level debugging, so strip their debug info pre-link,
+# leaving a clean DWARF-4 image any gdb >= 7.5 can read.
+for _rt in "${LIB_FUZZING_ENGINE:-}" /usr/local/lib/clang/*/lib/*/libclang_rt.*.a; do
+  [ -f "$_rt" ] && strip --strip-debug "$_rt" 2>/dev/null || true
+done
+
+compile
+libCRS submit-build-output "$OUT" debug

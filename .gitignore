@@ -1,0 +1,11 @@
+__pycache__
+*.egg-info
+
+# Python build artifacts (from `pip install .` / `pip wheel`)
+build/
+dist/
+*.whl
+
+
+# Local planning doc — keep on disk, not in git
+PLAN.md

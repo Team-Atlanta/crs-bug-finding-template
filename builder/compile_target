@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+set -e
+
+# /usr/local/bin/compile is an OSS-Fuzz provided wrapper
+# that calls the project-supplied build.sh with some environment setup.
+# As per OSS-Fuzz convention, the build.sh will respect $CC/$CXX and $CFLAGS/$CXXFLAGS
+compile
+
+# OSS-Fuzz expect the compiled fuzzers to be in $OUT (typically /out)
+# We will keep track of the fuzzers, keyed by "build"
+libCRS submit-build-output "$OUT" build
+
+# We will also keep track of the post-compiled source code for the agent to analyze
+libCRS submit-build-output "$SRC" src

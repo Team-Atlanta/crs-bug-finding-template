@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# AFL++ build — REDACTED for the tutorial (implementing this is chapter 2's task).
+#
+# This is a no-op placeholder: it submits a dummy `afl` artifact so the
+# `afl-build` phase in oss-crs/crs.yaml still completes, but produces no real
+# AFL-instrumented harness. Implement the real build as part of tutorial
+# chapter 2 (see tutorial/02-instrumentation.md) — set FUZZING_ENGINE=afl, call
+# OSS-Fuzz's `compile`, then submit $OUT under the `afl` key.
+set -e
+
+# Dummy output so the build phase has something to submit under `afl`.
+: > "$OUT/afl_build_not_implemented"
+libCRS submit-build-output "$OUT" afl

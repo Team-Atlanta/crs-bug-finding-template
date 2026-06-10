@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# CodeQL build: create a CodeQL database by tracing the project compile, for
+# semantic code queries (data-flow, taint, call graphs, call sites). Output
+# path must match the `codeql-build` step in oss-crs/crs.yaml.
+#
+set -e
+
+# This CRS targets C/C++; the CodeQL extractor language is always cpp.
+ql_lang=cpp
+
+db="$OUT/codeql/db"
+rm -rf "$db"
+mkdir -p "$(dirname "$db")"
+
+# CodeQL runs the build --command from --source-root, but oss-fuzz build.sh
+# expects to run from the project WORKDIR (e.g. /src/jq, where ./configure and
+# the Makefile live) — running `compile` from /src breaks autoreconf/configure.
+# Capture the inherited WORKDIR now (before CodeQL chdirs) and cd back to it in
+# a wrapper so the build runs exactly as the default `compile_target` does,
+# while keeping $SRC as the DB source root so all compiled TUs are captured.
+workdir="$PWD"
+wrapper="$(mktemp)"
+cat > "$wrapper" <<EOF
+#!/bin/bash
+set -e
+cd "$workdir"
+exec compile
+EOF
+chmod +x "$wrapper"
+
+# The build runs under the CodeQL tracer, which observes every compiler
+# invocation to extract the database. The instrumented binaries the build
+# produces are discarded (we keep only the DB), but the build must succeed for
+# extraction to complete. --overwrite keeps the step idempotent on rebuilds.
+codeql database create "$db" \
+  --language="$ql_lang" \
+  --source-root="$SRC" \
+  --command="$wrapper" \
+  --overwrite
+
+# Sanity: a usable DB has a populated db-<lang> directory with TRAP/relations.
+if [ ! -d "$db/db-$ql_lang" ]; then
+  echo "[compile_codeql] CodeQL database missing db-$ql_lang dir; extraction failed" >&2
+  exit 1
+fi
+
+libCRS submit-build-output "$db" codeql
